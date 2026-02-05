@@ -1,17 +1,31 @@
-import React, { useState } from 'react';
-import { useNavigate } from 'react-router-dom';
-import { FiArrowLeft, FiCheckCircle } from 'react-icons/fi';
-import FormularioVCard from '../componentes/cartoes/FormularioVCard';
-import GeradorQRCode from '../componentes/cartoes/GeradorQRCode';
+import React, { useState } from "react";
+import { useNavigate } from "react-router-dom";
+import { FiArrowLeft, FiCheckCircle } from "react-icons/fi";
+import FormularioVCard from "../componentes/cartoes/FormularioVCard";
+import GeradorQRCode from "../componentes/cartoes/GeradorQRCode";
+import { useCartoes } from "../contextos/CartoesContext";
 
 const CriarCartao = () => {
   const navigate = useNavigate();
+  const { adicionarFuncionario, carregarFuncionarios } = useCartoes();
   const [funcionarioCriado, setFuncionarioCriado] = useState(null);
   const [mostrarQRCode, setMostrarQRCode] = useState(false);
+  const [carregando, setCarregando] = useState(false);
 
-  const handleSalvar = (dados) => {
-    setFuncionarioCriado(dados);
-    setMostrarQRCode(true);
+  const handleSalvar = async (dados) => {
+    try {
+      setCarregando(true);
+      const resultado = await adicionarFuncionario(dados);
+      setFuncionarioCriado(resultado);
+      setMostrarQRCode(true);
+      await carregarFuncionarios(); // Atualizar lista de funcionários
+    } catch (error) {
+      alert(
+        `Erro ao criar funcionário: ${error.message || "Erro desconhecido"}`,
+      );
+    } finally {
+      setCarregando(false);
+    }
   };
 
   return (
@@ -38,24 +52,38 @@ const CriarCartao = () => {
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
         {/* Formulário */}
         <div className="bg-white rounded-xl shadow-lg p-6">
-          {mostrarQRCode && funcionarioCriado ? (
+          {carregando ? (
+            <div className="text-center py-12">
+              <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-[#106a37] mx-auto mb-4"></div>
+              <p className="text-gray-600">Salvando funcionário...</p>
+            </div>
+          ) : mostrarQRCode && funcionarioCriado ? (
             <div className="text-center py-8">
               <FiCheckCircle className="text-green-500 text-6xl mx-auto mb-4" />
               <h2 className="text-2xl font-bold text-gray-800 mb-2">
                 Funcionário Cadastrado!
               </h2>
               <p className="text-gray-600 mb-6">
-                O QR Code foi gerado com sucesso. Você pode visualizá-lo ao lado.
+                O QR Code foi gerado com sucesso. Você pode visualizá-lo ao
+                lado.
               </p>
-              <button
-                onClick={() => {
-                  setMostrarQRCode(false);
-                  setFuncionarioCriado(null);
-                }}
-                className="px-6 py-3 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-all font-medium"
-              >
-                Criar Outro Cartão
-              </button>
+              <div className="flex flex-col sm:flex-row gap-3 justify-center">
+                <button
+                  onClick={() => {
+                    setMostrarQRCode(false);
+                    setFuncionarioCriado(null);
+                  }}
+                  className="px-6 py-3 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-all font-medium"
+                >
+                  Criar Outro Cartão
+                </button>
+                <button
+                  onClick={() => navigate("/funcionarios")}
+                  className="px-6 py-3 bg-gray-200 text-gray-700 rounded-lg hover:bg-gray-300 transition-all font-medium"
+                >
+                  Ver Todos os Funcionários
+                </button>
+              </div>
             </div>
           ) : (
             <FormularioVCard onSalvar={handleSalvar} />
@@ -83,4 +111,3 @@ const CriarCartao = () => {
 };
 
 export default CriarCartao;
-
