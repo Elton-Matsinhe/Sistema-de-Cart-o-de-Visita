@@ -20,6 +20,7 @@ const FormularioVCard = ({ funcionarioExistente, onSalvar, onCancelar }) => {
   );
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [erro, setErro] = useState(null);
+  const [comprimindoImagem, setComprimindoImagem] = useState(false);
 
   const {
     register,
@@ -53,16 +54,152 @@ const FormularioVCard = ({ funcionarioExistente, onSalvar, onCancelar }) => {
     }
   }, [funcionarioExistente, setValue]);
 
-  const handleFotoChange = (e) => {
+  // Função para comprimir e redimensionar imagem com verificação de tamanho
+  const comprimirImagem = (file, maxWidth = 600, maxHeight = 600, maxSizeKB = 500) => {
+    return new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onload = (e) => {
+        const img = new Image();
+        img.onload = () => {
+          // Função auxiliar para calcular tamanho da data URL
+          const getDataURLSize = (dataURL) => {
+            // Aproximação: base64 é ~33% maior que o arquivo original
+            // Remover o prefixo "data:image/jpeg;base64," para contar apenas os dados
+            const base64Data = dataURL.split(',')[1] || '';
+            return (base64Data.length * 3) / 4 / 1024; // Tamanho em KB
+          };
+
+          // Função para comprimir com parâmetros específicos
+          const compressWithParams = (width, height, quality) => {
+            const canvas = document.createElement('canvas');
+            canvas.width = width;
+            canvas.height = height;
+            const ctx = canvas.getContext('2d');
+            
+            // Melhorar qualidade de renderização
+            ctx.imageSmoothingEnabled = true;
+            ctx.imageSmoothingQuality = 'high';
+            
+            ctx.drawImage(img, 0, 0, width, height);
+            return canvas.toDataURL('image/jpeg', quality);
+          };
+
+          // Calcular dimensões iniciais mantendo proporção
+          let width = img.width;
+          let height = img.height;
+
+          if (width > height) {
+            if (width > maxWidth) {
+              height = Math.round((height * maxWidth) / width);
+              width = maxWidth;
+            }
+          } else {
+            if (height > maxHeight) {
+              width = Math.round((width * maxHeight) / height);
+              height = maxHeight;
+            }
+          }
+
+          // Tentar diferentes níveis de qualidade e dimensões até atingir o tamanho desejado
+          const qualities = [0.7, 0.5, 0.4, 0.3, 0.25, 0.2];
+          let dataURL = null;
+          let currentWidth = width;
+          let currentHeight = height;
+          let bestResult = null;
+          let bestSize = Infinity;
+
+          // Tentar diferentes qualidades
+          for (const quality of qualities) {
+            dataURL = compressWithParams(currentWidth, currentHeight, quality);
+            const sizeKB = getDataURLSize(dataURL);
+            
+            if (sizeKB <= maxSizeKB) {
+              resolve(dataURL);
+              return;
+            }
+            
+            // Guardar o melhor resultado até agora
+            if (sizeKB < bestSize) {
+              bestSize = sizeKB;
+              bestResult = dataURL;
+            }
+          }
+
+          // Se ainda não atingiu o tamanho, reduzir dimensões progressivamente
+          let reductionFactor = 0.8;
+          while (bestSize > maxSizeKB * 1.2 && currentWidth > 200 && currentHeight > 200) {
+            currentWidth = Math.round(currentWidth * reductionFactor);
+            currentHeight = Math.round(currentHeight * reductionFactor);
+            
+            // Tentar com qualidade baixa nas novas dimensões
+            dataURL = compressWithParams(currentWidth, currentHeight, 0.3);
+            const sizeKB = getDataURLSize(dataURL);
+            
+            if (sizeKB <= maxSizeKB) {
+              resolve(dataURL);
+              return;
+            }
+            
+            if (sizeKB < bestSize) {
+              bestSize = sizeKB;
+              bestResult = dataURL;
+            }
+            
+            reductionFactor = 0.9; // Reduzir mais devagar nas próximas iterações
+          }
+
+          // Usar o melhor resultado encontrado
+          if (bestResult) {
+            resolve(bestResult);
+          } else {
+            resolve(dataURL);
+          }
+        };
+        img.onerror = reject;
+        img.src = e.target.result;
+      };
+      reader.onerror = reject;
+      reader.readAsDataURL(file);
+    });
+  };
+
+  const handleFotoChange = async (e) => {
     const file = e.target.files[0];
     if (file) {
-      const reader = new FileReader();
-      reader.onloadend = () => {
-        const result = reader.result;
-        setFotoPreview(result);
-        setValue("fotoPerfil", result);
-      };
-      reader.readAsDataURL(file);
+      try {
+        setComprimindoImagem(true);
+        
+        // Verificar tamanho do arquivo (máximo 10MB antes de compressão)
+        if (file.size > 10 * 1024 * 1024) {
+          alert("A imagem é muito grande. Por favor, escolha uma imagem menor que 10MB.");
+          setComprimindoImagem(false);
+          return;
+        }
+
+        // Comprimir e redimensionar a imagem (máximo 500KB após compressão)
+        // Reduzir dimensões para 600x600 para garantir menor tamanho
+        const compressedImage = await comprimirImagem(file, 600, 600, 500);
+        
+        // Verificar tamanho final da data URL
+        const base64Data = compressedImage.split(',')[1] || '';
+        const sizeKB = (base64Data.length * 3) / 4 / 1024;
+        
+        if (sizeKB > 2000) { // Se ainda for maior que 2MB
+          alert("A imagem ainda é muito grande após compressão (" + sizeKB.toFixed(0) + "KB). Por favor, use uma imagem menor ou uma URL externa.");
+          setComprimindoImagem(false);
+          return;
+        }
+        
+        console.log(`✅ Imagem comprimida: ${sizeKB.toFixed(2)}KB (original: ${(file.size / 1024).toFixed(2)}KB)`);
+        
+        setFotoPreview(compressedImage);
+        setValue("fotoPerfil", compressedImage);
+        setComprimindoImagem(false);
+      } catch (error) {
+        console.error("Erro ao processar imagem:", error);
+        alert("Erro ao processar a imagem. Tente novamente.");
+        setComprimindoImagem(false);
+      }
     }
   };
 
@@ -71,21 +208,42 @@ const FormularioVCard = ({ funcionarioExistente, onSalvar, onCancelar }) => {
     setErro(null);
 
     try {
-      const dadosCompletos = {
-        ...dados,
-        fotoPerfil: fotoPreview || dados.fotoPerfil,
-        dataCriacao: funcionarioExistente
-          ? dados.dataCriacao
-          : new Date().toISOString(),
-      };
+      let dadosCompletos;
+      
+      if (funcionarioExistente && (funcionarioExistente.id || funcionarioExistente._id)) {
+        // Atualizar funcionário existente - remover campos de data e sistema
+        const { dataCriacao, createdAt, ultimaAtualizacao, id, _id, ...dadosParaAtualizar } = dados;
+        
+        // Filtrar apenas campos que têm valores (exceto fotoPerfil que pode ser string vazia)
+        const camposAtualizados = {};
+        Object.entries(dadosParaAtualizar).forEach(([key, value]) => {
+          // Incluir todos os campos que não são undefined/null (permitir strings vazias)
+          if (value !== undefined && value !== null) {
+            camposAtualizados[key] = value;
+          }
+        });
+        
+        // Sempre incluir fotoPerfil se houver fotoPreview ou se foi explicitamente definido
+        const fotoParaEnviar = fotoPreview || dados.fotoPerfil;
+        if (fotoParaEnviar !== undefined) {
+          camposAtualizados.fotoPerfil = fotoParaEnviar;
+        }
+        
+        dadosCompletos = camposAtualizados;
+      } else {
+        // Criar novo funcionário
+        dadosCompletos = {
+          ...dados,
+          fotoPerfil: fotoPreview || dados.fotoPerfil || "",
+          dataCriacao: new Date().toISOString(),
+        };
+      }
 
       let resultado;
-      if (funcionarioExistente && funcionarioExistente.id) {
+      if (funcionarioExistente && (funcionarioExistente.id || funcionarioExistente._id)) {
         // Atualizar funcionário existente
-        resultado = await atualizarFuncionario(
-          funcionarioExistente.id,
-          dadosCompletos,
-        );
+        const id = funcionarioExistente.id || funcionarioExistente._id;
+        resultado = await atualizarFuncionario(id, dadosCompletos);
       } else {
         // Criar novo funcionário
         resultado = await adicionarFuncionario(dadosCompletos);
@@ -356,17 +514,26 @@ const FormularioVCard = ({ funcionarioExistente, onSalvar, onCancelar }) => {
           </label>
           <input
             {...register("fotoPerfil", {
-              pattern: {
-                value: /^(https?:\/\/.*\.(?:png|jpg|jpeg|gif|webp))?$/i,
-                message: "URL de imagem inválida",
+              validate: (value) => {
+                // Permitir vazio, URLs HTTP/HTTPS ou data URLs (base64)
+                if (!value || value.trim() === "") return true;
+                if (value.startsWith("data:image/")) return true; // Data URL (imagem local)
+                if (value.startsWith("http://") || value.startsWith("https://")) {
+                  // Validar se é uma URL de imagem válida
+                  return /\.(png|jpg|jpeg|gif|webp)(\?.*)?$/i.test(value) || true;
+                }
+                return "URL de imagem inválida. Use uma URL HTTP/HTTPS ou faça upload de uma imagem.";
               },
             })}
-            type="url"
+            type="text"
             className="w-full px-4 py-3 rounded-lg border border-gray-300 focus:ring-2 focus:ring-[#106a37] focus:border-transparent transition-all mb-3"
-            placeholder="https://exemplo.com/foto.jpg"
+            placeholder="https://exemplo.com/foto.jpg ou faça upload abaixo"
             onChange={(e) => {
-              if (e.target.value.startsWith("http")) {
-                setFotoPreview(e.target.value);
+              const valor = e.target.value;
+              // Atualizar preview se for URL HTTP ou data URL
+              if (valor.startsWith("http") || valor.startsWith("data:image/")) {
+                setFotoPreview(valor);
+                setValue("fotoPerfil", valor);
               }
             }}
           />
@@ -381,10 +548,15 @@ const FormularioVCard = ({ funcionarioExistente, onSalvar, onCancelar }) => {
               type="file"
               accept="image/*"
               onChange={handleFotoChange}
-              className="w-full px-4 py-3 rounded-lg border border-gray-300 focus:ring-2 focus:ring-[#106a37] focus:border-transparent transition-all file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-sm file:font-semibold file:bg-[#106a37] file:text-white hover:file:bg-[#0d5a2c]"
+              disabled={comprimindoImagem}
+              className="w-full px-4 py-3 rounded-lg border border-gray-300 focus:ring-2 focus:ring-[#106a37] focus:border-transparent transition-all file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-sm file:font-semibold file:bg-[#106a37] file:text-white hover:file:bg-[#0d5a2c] disabled:opacity-50 disabled:cursor-not-allowed"
             />
             <span className="absolute text-xs text-gray-500 mt-1">
-              Formatos aceitos: PNG, JPG, JPEG, GIF, WEBP
+              {comprimindoImagem ? (
+                <span className="text-[#106a37] font-medium">Comprimindo imagem... Aguarde</span>
+              ) : (
+                "Formatos aceitos: PNG, JPG, JPEG, GIF, WEBP (será comprimido automaticamente)"
+              )}
             </span>
           </div>
 

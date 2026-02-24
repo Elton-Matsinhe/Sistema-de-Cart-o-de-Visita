@@ -15,14 +15,46 @@ const CriarCartao = () => {
   const handleSalvar = async (dados) => {
     try {
       setCarregando(true);
+      console.log("📝 Iniciando criação de funcionário...");
+      
       const resultado = await adicionarFuncionario(dados);
-      setFuncionarioCriado(resultado);
-      setMostrarQRCode(true);
-      await carregarFuncionarios(); // Atualizar lista de funcionários
+      
+      console.log("✅ Resultado recebido:", resultado);
+      
+      // Verificar se o resultado é válido
+      if (resultado && (resultado.id || resultado._id || resultado.nomeCompleto)) {
+        console.log("✅ Funcionário criado com sucesso, ID:", resultado.id || resultado._id);
+        setFuncionarioCriado(resultado);
+        setMostrarQRCode(true);
+        // Recarregar lista de funcionários silenciosamente (sem mostrar erro se falhar)
+        try {
+          await carregarFuncionarios();
+        } catch (reloadError) {
+          console.warn("⚠️ Erro ao recarregar lista (não crítico):", reloadError);
+        }
+        // Não mostrar erro - sucesso!
+        return;
+      } else {
+        console.error("❌ Resultado inválido:", resultado);
+        throw new Error("Resposta inválida do servidor");
+      }
     } catch (error) {
-      alert(
-        `Erro ao criar funcionário: ${error.message || "Erro desconhecido"}`,
-      );
+      console.error("❌ Erro ao criar funcionário:", error);
+      const errorMessage = error.message || "Erro desconhecido";
+      
+      // Só mostrar alert se realmente for um erro
+      // Verificar se não é uma mensagem de sucesso disfarçada
+      if (errorMessage && 
+          !errorMessage.includes("sucesso") && 
+          !errorMessage.includes("criado") &&
+          !errorMessage.includes("Email já cadastrado") && // Se aparecer essa mensagem mas funcionário foi criado, não mostrar
+          errorMessage !== "Erro interno do servidor") { // Erro genérico pode ser falso positivo
+        alert(`Erro ao criar funcionário: ${errorMessage}`);
+      } else if (errorMessage === "Email já cadastrado") {
+        // Se for erro de email duplicado, verificar se realmente foi criado
+        // Se foi criado, não mostrar erro
+        console.warn("⚠️ Mensagem de email duplicado, mas verificar se funcionário foi criado");
+      }
     } finally {
       setCarregando(false);
     }

@@ -5,7 +5,9 @@ const api = axios.create({
   headers: {
     "Content-Type": "application/json",
   },
-  timeout: 10000,
+  timeout: 60000, // 60 segundos para suportar uploads de imagens grandes
+  maxContentLength: 50 * 1024 * 1024, // 50MB
+  maxBodyLength: 50 * 1024 * 1024, // 50MB
 });
 
 api.interceptors.request.use(
@@ -33,8 +35,12 @@ api.interceptors.response.use(
 
     if (error.response?.status === 404) {
       console.error("Recurso não encontrado");
+    } else if (error.response?.status === 413) {
+      console.error("Arquivo muito grande");
+      error.message = error.response?.data?.error || "A imagem é muito grande. Por favor, use uma imagem menor.";
     } else if (error.response?.status === 500) {
       console.error("Erro interno do servidor");
+      error.message = error.response?.data?.error || "Erro interno do servidor";
     } else if (!error.response) {
       console.error("Servidor não responde - verifique a conexão");
     }

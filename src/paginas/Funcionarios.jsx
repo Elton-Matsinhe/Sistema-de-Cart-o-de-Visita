@@ -47,8 +47,8 @@ const Funcionarios = () => {
 
   useEffect(() => {
     const verQR = searchParams.get("verQR");
-    if (verQR) {
-      const funcionario = funcionarios.find((f) => f.id === verQR);
+    if (verQR && Array.isArray(funcionarios)) {
+      const funcionario = funcionarios.find((f) => f.id === verQR || f.id === parseInt(verQR));
       if (funcionario) {
         setFuncionarioSelecionado(funcionario);
       }
@@ -56,7 +56,7 @@ const Funcionarios = () => {
   }, [searchParams, funcionarios]);
 
   // Função de filtragem aprimorada
-  const funcionariosFiltrados = funcionarios
+  const funcionariosFiltrados = (Array.isArray(funcionarios) ? funcionarios : [])
     .filter((func) => {
       if (!busca) return true;
 
@@ -141,14 +141,19 @@ const Funcionarios = () => {
   const handleExcluir = async (funcionario) => {
     if (
       window.confirm(
-        `Tem certeza que deseja excluir ${funcionario.nomeCompleto}?`,
+        `Tem certeza que deseja excluir ${funcionario.nomeCompleto || 'este funcionário'}?`,
       )
     ) {
       try {
-        await excluirFuncionario(funcionario.id || funcionario._id);
+        const id = funcionario.id || funcionario._id;
+        if (!id) {
+          throw new Error("ID do funcionário não encontrado");
+        }
+        await excluirFuncionario(id);
         await carregarFuncionarios();
         alert("Funcionário excluído com sucesso!");
       } catch (error) {
+        console.error("Erro ao excluir funcionário:", error);
         alert(
           `Erro ao excluir funcionário: ${error.message || "Erro desconhecido"}`,
         );
@@ -156,10 +161,14 @@ const Funcionarios = () => {
     }
   };
 
-  const handleSalvar = () => {
-    setMostrarFormulario(false);
-    setFuncionarioEditando(null);
-    carregarFuncionarios(); // Recarregar lista após salvar
+  const handleSalvar = async () => {
+    try {
+      setMostrarFormulario(false);
+      setFuncionarioEditando(null);
+      await carregarFuncionarios(); // Recarregar lista após salvar
+    } catch (error) {
+      console.error("Erro ao recarregar funcionários:", error);
+    }
   };
 
   const handleCancelar = () => {
