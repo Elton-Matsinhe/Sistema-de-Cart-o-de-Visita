@@ -357,26 +357,16 @@ const FormularioVCard = ({ funcionarioExistente, onSalvar, onCancelar }) => {
           <input
             {...register("fotoPerfil", {
               pattern: {
-                // Aceita:
-                // - Qualquer URL http/https
-                // - data URLs (base64) geradas pelo upload local
-                value: /^(https?:\/\/.+|data:image\/[a-zA-Z]+;base64,.+)?$/i,
-                message:
-                  "URL inválida. Use um link http(s) público ou selecione um arquivo.",
+                value: /^(https?:\/\/.*\.(?:png|jpg|jpeg|gif|webp))?$/i,
+                message: "URL de imagem inválida",
               },
             })}
             type="url"
             className="w-full px-4 py-3 rounded-lg border border-gray-300 focus:ring-2 focus:ring-[#106a37] focus:border-transparent transition-all mb-3"
-            placeholder="https://exemplo.com/foto.jpg (ou cole um link público do Drive)"
+            placeholder="https://exemplo.com/foto.jpg"
             onChange={(e) => {
-              const value = e.target.value.trim();
-              if (!value) {
-                setFotoPreview("");
-                setValue("fotoPerfil", "");
-                return;
-              }
-              if (value.startsWith("http")) {
-                setFotoPreview(value);
+              if (e.target.value.startsWith("http")) {
+                setFotoPreview(e.target.value);
               }
             }}
           />
@@ -405,10 +395,8 @@ const FormularioVCard = ({ funcionarioExistente, onSalvar, onCancelar }) => {
                 alt="Preview"
                 className="w-32 h-32 rounded-full object-cover border-4 border-[#106a37] shadow-lg"
                 onError={() => {
-                  // Se a imagem não carregar (ex: link privado do Drive),
-                  // mantemos o valor no formulário e apenas escondemos o preview.
-                  console.warn("Falha ao carregar imagem de perfil:", fotoPreview);
                   setFotoPreview("");
+                  setValue("fotoPerfil", "");
                 }}
               />
               <button
